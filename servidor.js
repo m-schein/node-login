@@ -3,15 +3,30 @@ const express = require('express')
 const app = express()
 const PORT = process.env.PORT || 4000
 const { pool } = require('./dbConfig')
+const bcrypt = require('bcrypt')
+const session = require('express-session')
+const flash = require('express-flash')
+const passport = require('passport')
+const initializePassport = require('./passportConfig')
 app.set('view engine', 'ejs')
 app.use(express.urlencoded({ extended: false }))
 
-app.get('/', (req, res) => {
-    res.render('index')
-})
+initializePassport(passport)
 
+
+app.use(session({
+    secret: 'secret',
+    resave: false,
+    saveUninitialized: false
+}))
+
+app.use(flash())
 app.get('/users/register', (req, res) => {
     res.render('register')
+})
+
+app.get('/', (req, res) => {
+    res.render('index')
 })
 
 app.get('/users/login', (req, res) => {
@@ -22,7 +37,7 @@ app.get('/users/dashboard', (req, res) => {
     res.render('dashboard', {user: 'Maiara'})
 })
 
-app.post('/users/register', (req, res)=> {
+app.post('/users/register', async (req, res)=> {
 
     let { name, email, password, confirmPassword } = req.body
    
@@ -49,6 +64,38 @@ app.post('/users/register', (req, res)=> {
 
     if(errors.length > 0){
         res.render('register', {errors})
+    }else{
+        let hashedPassword = await bcrypt.hash(password, 10)
+        console.log(hashedPassword)
+
+        pool.query(
+            `SELECT * FROM users
+            WHERE email = $1`, [email], (err, results) => {
+                if (err){
+                    console.log(err)
+                }
+                //console.log(results.rows)
+                if(results.rows.length > 0){
+                    errors.push({message: 'Email already registered'})
+                    res.render('register', { errors })
+                }else{
+                    pool.query(
+                        `INSERT INTO users (name, email, password)
+                        VALUES $1, $2, $3
+                        RETURNING id, password`, [name, email, hashedPassword], 
+                        (err, result) => {
+                            if(err){
+                                throw err
+                            }
+                            console.log(results.rows)
+                            req.flash('success_msg', 'You are now registered. Please log in')
+                            res.redirect('/users/login')
+                        })
+                }
+               
+                
+            }
+        )
     }
  })
 
