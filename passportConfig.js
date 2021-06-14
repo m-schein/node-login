@@ -49,4 +49,4 @@ function initialize(passport){
 
 }
 
-module.exports = initializec
+module.exports = initialize
